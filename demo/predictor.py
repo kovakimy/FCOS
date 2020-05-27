@@ -2,14 +2,19 @@
 import cv2
 import torch
 from torchvision import transforms as T
-
+import torchvision
 from fcos_core.modeling.detector import build_detection_model
 from fcos_core.utils.checkpoint import DetectronCheckpointer
 from fcos_core.structures.image_list import to_image_list
 from fcos_core.modeling.roi_heads.mask_head.inference import Masker
 from fcos_core import layers as L
 from fcos_core.utils import cv2_util
-
+from ptflops import get_model_complexity_info
+from pthflops import count_ops
+#from torchvision.models import resnet50
+from thop import profile
+import torch
+import time
 
 class COCODemo(object):
     # COCO categories for pretty print
@@ -160,6 +165,9 @@ class COCODemo(object):
         return transform
 
     def run_on_opencv_image(self, image):
+
+
+        
         """
         Arguments:
             image (np.ndarray): an image as returned by OpenCV
@@ -181,9 +189,10 @@ class COCODemo(object):
         if self.cfg.MODEL.KEYPOINT_ON:
             result = self.overlay_keypoints(result, top_predictions)
         result = self.overlay_class_names(result, top_predictions)
-
+        
         return result
 
+  
     def compute_prediction(self, original_image):
         """
         Arguments:
@@ -195,11 +204,15 @@ class COCODemo(object):
                 the BoxList via `prediction.fields()`
         """
         # apply pre-processing to image
+        time1 = time.time()
         image = self.transforms(original_image)
         # convert to an ImageList, padded so that it is divisible by
         # cfg.DATALOADER.SIZE_DIVISIBILITY
         image_list = to_image_list(image, self.cfg.DATALOADER.SIZE_DIVISIBILITY)
         image_list = image_list.to(self.device)
+        time2 = time.time()
+        razn = time2 - time1
+        print("Pre-Processing time = {}\n".format(razn))
         # compute predictions
         with torch.no_grad():
             predictions = self.model(image_list)
@@ -209,9 +222,12 @@ class COCODemo(object):
         prediction = predictions[0]
 
         # reshape prediction (a BoxList) into the original image size
+        time1 = time.time()
         height, width = original_image.shape[:-1]
         prediction = prediction.resize((width, height))
-
+        time2 = time.time()
+        razn = time2 - time1
+        print("Post-Pocessing time = {}\n".format(razn))
         if prediction.has_field("mask"):
             # if we have masks, paste the masks in the right position
             # in the image, as defined by the bounding boxes
@@ -219,6 +235,12 @@ class COCODemo(object):
             # always single image is passed at a time
             masks = self.masker([masks], [prediction])[0]
             prediction.add_field("mask", masks)
+        #dev = 'cpu'
+        #model = self.model.to(dev)
+        #inp = to_image_list(image, self.cfg.DATALOADER.SIZE_DIVISIBILITY).to(dev)
+
+        # Count the number of FLOPs
+        #count_ops(model, inp)
         return prediction
 
     def select_top_predictions(self, predictions):
@@ -269,9 +291,9 @@ class COCODemo(object):
         for box, color in zip(boxes, colors):
             box = box.to(torch.int64)
             top_left, bottom_right = box[:2].tolist(), box[2:].tolist()
-            image = cv2.rectangle(
-                image, tuple(top_left), tuple(bottom_right), tuple(color), 2
-            )
+            #image = cv2.rectangle(
+            #    image, tuple(top_left), tuple(bottom_right), tuple(color), 2
+            #)
 
         return image
 
@@ -365,9 +387,9 @@ class COCODemo(object):
         for box, score, label in zip(boxes, scores, labels):
             x, y = box[:2]
             s = template.format(label, score)
-            cv2.putText(
-                image, s, (x, y), cv2.FONT_HERSHEY_SIMPLEX, .5, (255, 255, 255), 1
-            )
+            #cv2.putText(
+            #    image, s, (x, y), cv2.FONT_HERSHEY_SIMPLEX, .5, (255, 255, 255), 1
+            #)
 
         return image
 

@@ -5,6 +5,7 @@ Implements the Generalized R-CNN framework
 
 import torch
 from torch import nn
+import time
 
 from fcos_core.structures.image_list import to_image_list
 
@@ -46,15 +47,28 @@ class GeneralizedRCNN(nn.Module):
         if self.training and targets is None:
             raise ValueError("In training mode, targets should be passed")
         images = to_image_list(images)
+        time1 = time.time()
         features = self.backbone(images.tensors)
+        time2 = time.time()
+        razn = time2 - time1
+        print("Backbone time = {}\n".format(razn))
+        time1 = time.time()
         proposals, proposal_losses = self.rpn(images, features, targets)
+        time2 = time.time()
+        razn = time2 - time1
+        print("RPN time = {}\n".format(razn))
         if self.roi_heads:
+            print("roi_heads\n")
             x, result, detector_losses = self.roi_heads(features, proposals, targets)
         else:
             # RPN-only models don't have roi_heads
+            time1 = time.time()
             x = features
             result = proposals
             detector_losses = {}
+            time2 = time.time()
+            razn = time2 - time1
+            print("HEAD time = {}\n".format(razn))
 
         if self.training:
             losses = {}
